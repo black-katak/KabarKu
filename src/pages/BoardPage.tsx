@@ -7,6 +7,7 @@ import Cover from '../components/Cover'
 import Modal from '../components/Modal'
 import MusicPlayer from '../components/MusicPlayer'
 import { uploadCover } from '../lib/cover'
+import { rememberBoard } from '../lib/myboards'
 import { store } from '../lib/store'
 import type { Item, ItemType, LoadedBoard } from '../types'
 
@@ -39,6 +40,7 @@ export default function BoardPage() {
         const r = await store.loadBoard(token)
         if (!r) return setState('missing')
         setData(r)
+        if (r.role === 'edit') rememberBoard(token, r.board.title)
         const incoming = r.items
         const newOnes = incoming.filter((i) => !known.current.has(i.id)).map((i) => i.id)
         incoming.forEach((i) => known.current.add(i.id))
