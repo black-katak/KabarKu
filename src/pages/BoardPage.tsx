@@ -6,6 +6,7 @@ import Composer from '../components/Composer'
 import Cover from '../components/Cover'
 import Modal from '../components/Modal'
 import MusicPlayer from '../components/MusicPlayer'
+import { uploadCover } from '../lib/cover'
 import { store } from '../lib/store'
 import type { Item, ItemType, LoadedBoard } from '../types'
 
@@ -137,6 +138,7 @@ export default function BoardPage() {
           <Cover
             title={data.board.title}
             message={data.board.cover_message}
+            image={data.board.cover_image}
             onOpen={() => {
               setPlaySignal((n) => n + 1)
               setCovered(false)
@@ -290,13 +292,27 @@ function SettingsModal({
 }: {
   board: LoadedBoard['board']
   onClose: () => void
-  onSave: (p: { title: string; cover_message: string; music_url: string }) => Promise<void>
+  onSave: (p: { title: string; cover_message: string; music_url: string; cover_image: string }) => Promise<void>
 }) {
   const [title, setTitle] = useState(board.title)
   const [cover, setCover] = useState(board.cover_message)
   const [music, setMusic] = useState(board.music_url)
+  const [coverImg, setCoverImg] = useState(board.cover_image ?? '')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+
+  const pickCover = async (f: File | undefined) => {
+    if (!f) return
+    setBusy(true)
+    setErr('')
+    try {
+      setCoverImg(await uploadCover(f))
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Gagal mengunggah foto sampul')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const pickSong = async (f: File | undefined) => {
     if (!f) return
@@ -318,6 +334,25 @@ function SettingsModal({
         <input className="field" maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Judul papan" />
         <textarea className="field" rows={2} maxLength={500} value={cover} onChange={(e) => setCover(e.target.value)} placeholder="Pesan di sampul" />
         <div>
+          <p className="mb-1 text-sm font-bold">Foto sampul</p>
+          <div className="flex items-center gap-3">
+            {coverImg ? (
+              <img src={coverImg} alt="Foto sampul" className="h-16 w-16 rounded object-cover" />
+            ) : (
+              <span className="text-4xl">💌</span>
+            )}
+            <label className="btn inline-block !text-sm">
+              {coverImg ? 'Ganti foto' : 'Pilih foto'}
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => pickCover(e.target.files?.[0])} />
+            </label>
+            {coverImg && (
+              <button className="btn btn-danger !text-sm" onClick={() => setCoverImg('')}>
+                Hapus
+              </button>
+            )}
+          </div>
+        </div>
+        <div>
           <p className="mb-1 text-sm font-bold">Lagu latar</p>
           <input className="field mb-2" value={music} onChange={(e) => setMusic(e.target.value)} placeholder="Tempel tautan mp3 langsung" />
           {store.mode === 'cloud' ? (
@@ -337,7 +372,7 @@ function SettingsModal({
           <button
             className="btn !bg-amber-300"
             disabled={busy}
-            onClick={() => onSave({ title: title.trim() || 'Papan Kita', cover_message: cover.trim(), music_url: music.trim() })}
+            onClick={() => onSave({ title: title.trim() || 'Papan Kita', cover_message: cover.trim(), music_url: music.trim(), cover_image: coverImg })}
           >
             Simpan
           </button>

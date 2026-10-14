@@ -13,7 +13,7 @@ export interface BoardStore {
   loadBoard(token: string): Promise<LoadedBoard | null>
   saveItem(editToken: string, item: Item): Promise<void>
   deleteItem(editToken: string, id: string): Promise<void>
-  updateBoard(editToken: string, patch: Partial<Pick<Board, 'title' | 'cover_message' | 'music_url'>>): Promise<void>
+  updateBoard(editToken: string, patch: Partial<Pick<Board, 'title' | 'cover_message' | 'music_url' | 'cover_image'>>): Promise<void>
   upload(file: Blob, ext: string): Promise<string>
 }
 
@@ -52,6 +52,7 @@ const localStore: BoardStore = {
       title,
       cover_message,
       music_url: '',
+      cover_image: '',
       view_token: rand(),
       edit_token: rand(),
       items: [],

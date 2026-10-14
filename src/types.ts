@@ -31,6 +31,7 @@ export interface Board {
   title: string
   cover_message: string
   music_url: string
+  cover_image?: string
   view_token: string
   edit_token?: string
 }
