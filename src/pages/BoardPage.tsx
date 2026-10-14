@@ -146,7 +146,21 @@ export default function BoardPage() {
       </AnimatePresence>
 
       <header className="mx-auto mb-3 flex max-w-[1250px] flex-wrap items-center justify-between gap-2">
-        <h1 className="font-hand text-4xl font-bold text-amber-50 sm:text-5xl">{data.board.title}</h1>
+        {editable ? (
+          <TitleEditor
+            title={data.board.title}
+            onSave={async (title) => {
+              try {
+                await store.updateBoard(editToken, { title })
+                setData((d) => (d ? { ...d, board: { ...d.board, title } } : d))
+              } catch (e) {
+                flash(e instanceof Error ? e.message : 'Gagal menyimpan judul')
+              }
+            }}
+          />
+        ) : (
+          <h1 className="font-hand text-4xl font-bold text-amber-50 sm:text-5xl">{data.board.title}</h1>
+        )}
         <div className="flex items-center gap-2">
           <MusicPlayer url={data.board.music_url} playSignal={playSignal} />
           {editable && (
@@ -330,5 +344,42 @@ function SettingsModal({
         </div>
       </div>
     </Modal>
+  )
+}
+
+function TitleEditor({ title, onSave }: { title: string; onSave: (t: string) => Promise<void> }) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState(title)
+  const commit = () => {
+    setEditing(false)
+    const t = val.trim() || 'Papan Kita'
+    setVal(t)
+    if (t !== title) onSave(t)
+  }
+  if (editing)
+    return (
+      <input
+        autoFocus
+        className="field !w-auto max-w-full font-hand !text-3xl font-bold sm:!text-4xl"
+        maxLength={80}
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && commit()}
+        aria-label="Judul papan"
+      />
+    )
+  return (
+    <button
+      className="group flex items-center gap-2 text-left"
+      onClick={() => {
+        setVal(title)
+        setEditing(true)
+      }}
+      aria-label="Ubah judul"
+    >
+      <h1 className="font-hand text-4xl font-bold text-amber-50 sm:text-5xl">{title}</h1>
+      <span className="text-lg opacity-60 group-hover:opacity-100">✏️</span>
+    </button>
   )
 }
