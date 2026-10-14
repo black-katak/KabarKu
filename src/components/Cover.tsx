@@ -10,6 +10,9 @@ interface Props {
 export default function Cover({ title, message, image, onOpen }: Props) {
   return (
     <motion.div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Sampul ${title}`}
       className="fixed inset-0 z-[60] flex flex-col items-center justify-center overflow-auto bg-[#2b1d12] p-6 text-center"
       exit={{ opacity: 0, scale: 1.1 }}
       transition={{ duration: 0.6 }}
@@ -29,6 +32,7 @@ export default function Cover({ title, message, image, onOpen }: Props) {
       <motion.button
         className="btn mt-8 !px-8 !py-3 !text-lg"
         onClick={onOpen}
+        autoFocus
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.7 }}

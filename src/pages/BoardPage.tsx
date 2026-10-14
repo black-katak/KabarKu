@@ -1,7 +1,8 @@
 import { AnimatePresence } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import Board from '../components/Board'
+import type { Viewport } from '../components/Board'
 import Composer from '../components/Composer'
 import Cover from '../components/Cover'
 import Modal from '../components/Modal'
@@ -13,6 +14,14 @@ import type { Item, ItemType, LoadedBoard } from '../types'
 
 export default function BoardPage() {
   const { token = '' } = useParams()
+  const location = useLocation()
+  const [welcome, setWelcome] = useState(() => !!(location.state as { created?: boolean } | null)?.created)
+  const getViewport = useRef<() => Viewport>(() => ({ x: 0, y: 0, w: 1200, h: 800 }))
+  const registerViewport = useCallback((fn: () => Viewport) => {
+    getViewport.current = fn
+  }, [])
+  const [undo, setUndo] = useState<Item | null>(null)
+  const undoTimer = useRef<number | undefined>(undefined)
   const [data, setData] = useState<LoadedBoard | null>(null)
   const [state, setState] = useState<'loading' | 'ready' | 'missing'>('loading')
   const [items, setItems] = useState<Item[]>([])
@@ -104,13 +113,29 @@ export default function BoardPage() {
   }
 
   const remove = async (id: string) => {
+    const gone = items.find((i) => i.id === id)
     setItems((cur) => cur.filter((i) => i.id !== id))
     setSelected(null)
     try {
       await store.deleteItem(editToken, id)
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Gagal menghapus')
+      return
     }
+    if (!gone) return
+    setUndo(gone)
+    window.clearTimeout(undoTimer.current)
+    undoTimer.current = window.setTimeout(() => setUndo(null), 7000)
+  }
+
+  const undoRemove = () => {
+    if (!undo) return
+    const back = undo
+    window.clearTimeout(undoTimer.current)
+    setUndo(null)
+    known.current.add(back.id)
+    setItems((cur) => [...cur, back])
+    persist(back)
   }
 
   const scaleItem = (f: number) => {
@@ -182,6 +207,7 @@ export default function BoardPage() {
           editable={!!editable}
           selectedId={selected}
           freshIds={fresh}
+          registerViewport={registerViewport}
           onSelect={(id) => {
             setSelected(id)
             if (id) {
@@ -231,7 +257,37 @@ export default function BoardPage() {
 
       <AnimatePresence>
         {composer && (
-          <Composer key={composer.item?.id ?? composer.type} type={composer.type} item={composer.item} topZ={topZ} onSave={saveFromComposer} onClose={() => setComposer(null)} />
+          <Composer key={composer.item?.id ?? composer.type} type={composer.type} item={composer.item} topZ={topZ} area={getViewport.current()} onSave={saveFromComposer} onClose={() => setComposer(null)} />
+        )}
+        {welcome && !covered && editable && (
+          <Modal
+            title="Papan siap! Simpan tautan ini"
+            onClose={() => {
+              setWelcome(false)
+              window.history.replaceState({}, '')
+            }}
+          >
+            <p className="mb-3 text-sm">
+              Tautan edit adalah satu-satunya kunci untuk mengubah papan ini. Jika hilang, papan tidak bisa dibuka lagi dari perangkat lain.
+              Salin dan simpan di catatan atau kirim ke diri sendiri.
+            </p>
+            <LinkRow label="Tautan edit (rahasia, untuk Anda)" value={editLink} />
+            <LinkRow label="Tautan lihat (aman dibagikan)" value={viewLink} />
+            {store.mode === 'local' && (
+              <p className="mt-2 text-sm font-bold text-red-800">Mode pratinjau: tautan hanya bekerja di browser ini.</p>
+            )}
+            <div className="mt-4 flex justify-end">
+              <button
+                className="btn !bg-amber-300"
+                onClick={() => {
+                  setWelcome(false)
+                  window.history.replaceState({}, '')
+                }}
+              >
+                Sudah saya simpan
+              </button>
+            </div>
+          </Modal>
         )}
         {panel === 'share' && (
           <Modal title="Bagikan papan" onClose={() => setPanel(null)}>
@@ -261,6 +317,14 @@ export default function BoardPage() {
         )}
       </AnimatePresence>
 
+      {undo && (
+        <div role="status" className="fixed bottom-24 left-1/2 z-[70] flex -translate-x-1/2 items-center gap-3 rounded-xl bg-stone-900 px-4 py-2 font-bold text-white shadow-lg">
+          Item dihapus
+          <button className="btn !px-3 !py-1 !text-sm" onClick={undoRemove}>
+            Urungkan
+          </button>
+        </div>
+      )}
       {toast && (
         <div className="fixed left-1/2 top-4 z-[70] -translate-x-1/2 rounded-xl bg-red-700 px-4 py-2 font-bold text-white shadow-lg">{toast}</div>
       )}

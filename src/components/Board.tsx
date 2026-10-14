@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Item } from '../types'
 import { CANVAS_H, CANVAS_W } from '../types'
 import BoardItem from './BoardItem'
@@ -11,6 +11,15 @@ interface Props {
   onSelect: (id: string | null) => void
   onMove: (id: string, x: number, y: number) => void
   onCommit: (id: string) => void
+  // Mendaftarkan fungsi yang mengembalikan area papan yang sedang terlihat (koordinat kanvas).
+  registerViewport?: (fn: () => Viewport) => void
+}
+
+export interface Viewport {
+  x: number
+  y: number
+  w: number
+  h: number
 }
 
 const NARROW = 700 // di bawah lebar ini dianggap ponsel
@@ -18,8 +27,9 @@ const READ_SCALE = 0.6 // skala baca di ponsel (papan digeser dengan jari)
 const CHROME = 28 // bingkai kayu kiri+kanan / atas+bawah
 const RESERVED_H = 220 // tinggi judul + toolbar bawah di layar lebar
 
-export default function Board({ items, editable, selectedId, freshIds, onSelect, onMove, onCommit }: Props) {
+export default function Board({ items, editable, selectedId, freshIds, onSelect, onMove, onCommit, registerViewport }: Props) {
   const wrap = useRef<HTMLDivElement>(null)
+  const scroller = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 1250, vh: 800 })
   const [fitAll, setFitAll] = useState(false)
 
@@ -48,6 +58,22 @@ export default function Board({ items, editable, selectedId, freshIds, onSelect,
     scale = Math.max(0.5, Math.min(1.4, inner / CANVAS_W, byH))
   }
 
+  // Urutan di antara item baru saja, supaya jeda animasi tidak tumbuh seiring jumlah item.
+  const freshOrder = useMemo(() => {
+    const m = new Map<string, number>()
+    let k = 0
+    for (const it of items) if (freshIds.has(it.id)) m.set(it.id, k++)
+    return m
+  }, [items, freshIds])
+
+  useEffect(() => {
+    registerViewport?.(() => {
+      const el = scroller.current
+      if (!el) return { x: 0, y: 0, w: CANVAS_W, h: CANVAS_H }
+      return { x: el.scrollLeft / scale, y: el.scrollTop / scale, w: el.clientWidth / scale, h: el.clientHeight / scale }
+    })
+  }, [registerViewport, scale])
+
   const contentW = CANVAS_W * scale
   const contentH = CANVAS_H * scale
   const frameW = narrow ? size.w : Math.min(size.w, contentW + CHROME)
@@ -61,6 +87,7 @@ export default function Board({ items, editable, selectedId, freshIds, onSelect,
         onPointerDown={() => onSelect(null)}
       >
         <div
+          ref={scroller}
           className="h-full w-full overflow-auto"
           style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}
         >
@@ -71,11 +98,11 @@ export default function Board({ items, editable, selectedId, freshIds, onSelect,
                   Papan masih kosong. Tempel sesuatu!
                 </div>
               )}
-              {items.map((it, i) => (
+              {items.map((it) => (
                 <BoardItem
                   key={it.id}
                   item={it}
-                  index={i}
+                  index={freshOrder.get(it.id) ?? 0}
                   scale={scale}
                   editable={editable}
                   selected={selectedId === it.id}

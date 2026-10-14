@@ -19,7 +19,7 @@ export default function Home() {
     setErr('')
     try {
       const t = await store.createBoard(title.trim() || 'Papan Kita', msg.trim())
-      nav(`/e/${t.editToken}`)
+      nav(`/e/${t.editToken}`, { state: { created: true } })
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Gagal membuat papan')
       setBusy(false)

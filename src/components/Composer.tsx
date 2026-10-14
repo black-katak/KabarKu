@@ -4,6 +4,7 @@ import { COLORS, PAPERS, SIZES, STICKERS, randomRotation } from '../lib/catalog'
 import { compressImage } from '../lib/image'
 import { newId, store } from '../lib/store'
 import { CANVAS_H, CANVAS_W } from '../types'
+import type { Viewport } from './Board'
 import Modal from './Modal'
 import Paper from './Paper'
 
@@ -11,11 +12,19 @@ interface Props {
   type: ItemType
   item?: Item
   topZ: number
+  area: Viewport // area papan yang sedang terlihat
   onSave: (item: Item) => void
   onClose: () => void
 }
 
-function blank(type: ItemType, z: number): Item {
+// Taruh item acak di dalam area yang terlihat, dengan sisa jarak 20px dari tepi.
+function place(start: number, span: number, size: number, max: number) {
+  const lo = Math.max(0, start + 20)
+  const hi = Math.min(max - size, start + span - size - 20)
+  return Math.round(hi > lo ? lo + Math.random() * (hi - lo) : Math.max(0, Math.min(max - size, start)))
+}
+
+function blank(type: ItemType, z: number, area: Viewport): Item {
   const w = type === 'photo' ? 230 : type === 'sticker' ? 110 : 220
   return {
     id: newId(),
@@ -28,15 +37,15 @@ function blank(type: ItemType, z: number): Item {
     height: type === 'photo' ? w * 1.2 : type === 'sticker' ? 110 : 220,
     sticker: '',
     image_url: '',
-    x: Math.round(40 + Math.random() * (CANVAS_W - w - 80)),
-    y: Math.round(40 + Math.random() * (CANVAS_H - w * 1.2 - 80)),
+    x: place(area.x, area.w, w, CANVAS_W),
+    y: place(area.y, area.h, type === 'photo' ? w * 1.2 : w, CANVAS_H),
     rotation: randomRotation(type === 'sticker' ? 20 : 7),
     z,
   }
 }
 
-export default function Composer({ type, item, topZ, onSave, onClose }: Props) {
-  const [it, setIt] = useState<Item>(() => item ?? blank(type, topZ + 1))
+export default function Composer({ type, item, topZ, area, onSave, onClose }: Props) {
+  const [it, setIt] = useState<Item>(() => item ?? blank(type, topZ + 1, area))
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const set = (p: Partial<Item>) => setIt((o) => ({ ...o, ...p }))

@@ -300,3 +300,16 @@ body {
   outline: none;
   border-color: #b8742a;
 }
+
+/* Hormati pengaturan "kurangi gerakan" di perangkat */
+@media (prefers-reduced-motion: reduce) {
+  .developing img {
+    animation: none;
+  }
+  .animate-spin {
+    animation: none;
+  }
+  .btn {
+    transition: none;
+  }
+}

@@ -68,7 +68,7 @@ export default function BoardItem({ item, index, scale, editable, selected, fres
         style={{ width: '100%', height: '100%', transformOrigin: '50% 8%' }}
         initial={fresh ? { y: -700, opacity: 0, rotate: item.rotation + 40 } : false}
         animate={{ y: 0, opacity: 1, rotate: item.rotation }}
-        transition={{ type: 'spring', stiffness: 70, damping: 11, delay: fresh ? 0.15 + index * 0.12 : 0 }}
+        transition={{ type: 'spring', stiffness: 70, damping: 11, delay: fresh ? Math.min(2, 0.15 + index * 0.12) : 0 }}
         whileHover={editable ? undefined : { rotate: item.rotation + 3, scale: 1.04, transition: { type: 'spring', stiffness: 300 } }}
       >
         {item.type === 'note' && <Paper item={item} />}
