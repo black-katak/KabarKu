@@ -1,0 +1,334 @@
+import { AnimatePresence } from 'framer-motion'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import Board from '../components/Board'
+import Composer from '../components/Composer'
+import Cover from '../components/Cover'
+import Modal from '../components/Modal'
+import MusicPlayer from '../components/MusicPlayer'
+import { store } from '../lib/store'
+import type { Item, ItemType, LoadedBoard } from '../types'
+
+export default function BoardPage() {
+  const { token = '' } = useParams()
+  const [data, setData] = useState<LoadedBoard | null>(null)
+  const [state, setState] = useState<'loading' | 'ready' | 'missing'>('loading')
+  const [items, setItems] = useState<Item[]>([])
+  const [fresh, setFresh] = useState<Set<string>>(new Set())
+  const [selected, setSelected] = useState<string | null>(null)
+  const [composer, setComposer] = useState<{ type: ItemType; item?: Item } | null>(null)
+  const [panel, setPanel] = useState<'share' | 'settings' | null>(null)
+  const [covered, setCovered] = useState(true)
+  const [playSignal, setPlaySignal] = useState(0)
+  const [toast, setToast] = useState('')
+  const known = useRef<Set<string>>(new Set())
+  const busy = useRef(false)
+
+  const editable = data?.role === 'edit'
+  const editToken = data?.board.edit_token ?? ''
+
+  const flash = (m: string) => {
+    setToast(m)
+    setTimeout(() => setToast(''), 3500)
+  }
+
+  const load = useCallback(
+    async (first: boolean) => {
+      try {
+        const r = await store.loadBoard(token)
+        if (!r) return setState('missing')
+        setData(r)
+        const incoming = r.items
+        const newOnes = incoming.filter((i) => !known.current.has(i.id)).map((i) => i.id)
+        incoming.forEach((i) => known.current.add(i.id))
+        if (first) setFresh(new Set(newOnes))
+        else if (newOnes.length) setFresh((f) => new Set([...f, ...newOnes]))
+        setItems((cur) => (first || !busy.current ? incoming : cur))
+        setState('ready')
+      } catch (e) {
+        if (first) setState('missing')
+        else console.warn(e)
+      }
+    },
+    [token],
+  )
+
+  useEffect(() => {
+    known.current = new Set()
+    setState('loading')
+    load(true)
+  }, [load])
+
+  // Pembaruan berkala di mode cloud supaya perubahan orang lain muncul (tanpa biaya realtime).
+  useEffect(() => {
+    if (store.mode !== 'cloud') return
+    const t = setInterval(() => {
+      if (!document.hidden && !busy.current && !composer) load(false)
+    }, 8000)
+    return () => clearInterval(t)
+  }, [load, composer])
+
+  const persist = async (item: Item) => {
+    try {
+      await store.saveItem(editToken, item)
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Gagal menyimpan')
+    }
+  }
+
+  const topZ = items.reduce((m, i) => Math.max(m, i.z), 0)
+  const sel = items.find((i) => i.id === selected)
+
+  const patch = (id: string, p: Partial<Item>, save = true) => {
+    setItems((cur) => cur.map((i) => (i.id === id ? { ...i, ...p } : i)))
+    if (save) {
+      const it = items.find((i) => i.id === id)
+      if (it) persist({ ...it, ...p })
+    }
+  }
+
+  const saveFromComposer = (it: Item) => {
+    const isNew = !items.some((i) => i.id === it.id)
+    known.current.add(it.id)
+    if (isNew) {
+      setFresh((f) => new Set(f).add(it.id))
+      setItems((cur) => [...cur, it])
+    } else {
+      setItems((cur) => cur.map((i) => (i.id === it.id ? it : i)))
+    }
+    persist(it)
+    setComposer(null)
+  }
+
+  const remove = async (id: string) => {
+    setItems((cur) => cur.filter((i) => i.id !== id))
+    setSelected(null)
+    try {
+      await store.deleteItem(editToken, id)
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Gagal menghapus')
+    }
+  }
+
+  const scaleItem = (f: number) => {
+    if (!sel) return
+    const width = Math.round(Math.max(70, Math.min(480, sel.width * f)))
+    patch(sel.id, { width, height: Math.round(sel.height * (width / sel.width)) })
+  }
+
+  if (state === 'loading') return <div className="cork flex min-h-screen items-center justify-center font-hand text-4xl">Memuat papan...</div>
+  if (state === 'missing' || !data)
+    return (
+      <div className="cork flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
+        <p className="font-hand text-5xl">Papan tidak ditemukan</p>
+        <p className="font-note text-xl">Periksa tautan atau buat papan baru.</p>
+        <Link to="/" className="btn">Buat papan</Link>
+      </div>
+    )
+
+  const origin = window.location.origin
+  const viewLink = `${origin}/b/${data.board.view_token}`
+  const editLink = editToken ? `${origin}/e/${editToken}` : ''
+
+  return (
+    <div className="min-h-screen bg-[#3b2a1e] px-3 pb-28 pt-4">
+      <AnimatePresence>
+        {covered && (
+          <Cover
+            title={data.board.title}
+            message={data.board.cover_message}
+            onOpen={() => {
+              setPlaySignal((n) => n + 1)
+              setCovered(false)
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <header className="mx-auto mb-3 flex max-w-[1250px] flex-wrap items-center justify-between gap-2">
+        <h1 className="font-hand text-4xl font-bold text-amber-50 sm:text-5xl">{data.board.title}</h1>
+        <div className="flex items-center gap-2">
+          <MusicPlayer url={data.board.music_url} playSignal={playSignal} />
+          {editable && (
+            <>
+              <button className="btn !text-sm" onClick={() => setPanel('share')}>Bagikan</button>
+              <button className="btn !text-sm" onClick={() => setPanel('settings')}>Pengaturan</button>
+            </>
+          )}
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-[1250px]">
+        <Board
+          items={items}
+          editable={!!editable}
+          selectedId={selected}
+          freshIds={fresh}
+          onSelect={(id) => {
+            setSelected(id)
+            if (id) {
+              const top = items.reduce((m, i) => Math.max(m, i.z), 0)
+              const it = items.find((i) => i.id === id)
+              if (it && it.z < top) patch(id, { z: top + 1 }, true)
+            }
+          }}
+          onMove={(id, x, y) => {
+            busy.current = true
+            patch(id, { x, y }, false)
+          }}
+          onCommit={(id) => {
+            busy.current = false
+            setItems((cur) => {
+              const it = cur.find((i) => i.id === id)
+              if (it) persist(it)
+              return cur
+            })
+          }}
+        />
+        {!editable && <p className="mt-3 text-center font-note text-lg text-amber-100/70">Kamu sedang melihat papan ini.</p>}
+      </div>
+
+      {editable && (
+        <div className="fixed inset-x-0 bottom-0 z-40 flex flex-col items-center gap-2 bg-gradient-to-t from-black/70 to-transparent p-3">
+          {sel && (
+            <div className="flex flex-wrap justify-center gap-2 rounded-2xl bg-black/50 p-2">
+              <button className="btn !text-sm" onClick={() => patch(sel.id, { rotation: sel.rotation - 5 })}>⟲</button>
+              <button className="btn !text-sm" onClick={() => patch(sel.id, { rotation: sel.rotation + 5 })}>⟳</button>
+              <button className="btn !text-sm" onClick={() => scaleItem(0.88)}>−</button>
+              <button className="btn !text-sm" onClick={() => scaleItem(1.14)}>＋</button>
+              <button className="btn !text-sm" onClick={() => patch(sel.id, { z: topZ + 1 })}>Ke depan</button>
+              {sel.type !== 'sticker' && (
+                <button className="btn !text-sm" onClick={() => setComposer({ type: sel.type, item: sel })}>Ubah</button>
+              )}
+              <button className="btn btn-danger !text-sm" onClick={() => remove(sel.id)}>Hapus</button>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button className="btn" onClick={() => setComposer({ type: 'note' })}>📝 Catatan</button>
+            <button className="btn" onClick={() => setComposer({ type: 'photo' })}>📷 Foto</button>
+            <button className="btn" onClick={() => setComposer({ type: 'sticker' })}>⭐ Stiker</button>
+          </div>
+        </div>
+      )}
+
+      <AnimatePresence>
+        {composer && (
+          <Composer key={composer.item?.id ?? composer.type} type={composer.type} item={composer.item} topZ={topZ} onSave={saveFromComposer} onClose={() => setComposer(null)} />
+        )}
+        {panel === 'share' && (
+          <Modal title="Bagikan papan" onClose={() => setPanel(null)}>
+            <LinkRow label="Tautan lihat (aman dibagikan)" value={viewLink} />
+            <LinkRow label="Tautan edit (rahasia, hanya untuk yang boleh mengubah)" value={editLink} />
+            {store.mode === 'local' && (
+              <p className="mt-3 text-sm font-bold text-red-800">
+                Mode pratinjau: tautan hanya bekerja di browser ini. Hubungkan Supabase agar orang lain bisa membuka.
+              </p>
+            )}
+          </Modal>
+        )}
+        {panel === 'settings' && (
+          <SettingsModal
+            board={data.board}
+            onClose={() => setPanel(null)}
+            onSave={async (p) => {
+              try {
+                await store.updateBoard(editToken, p)
+                setData((d) => (d ? { ...d, board: { ...d.board, ...p } } : d))
+                setPanel(null)
+              } catch (e) {
+                flash(e instanceof Error ? e.message : 'Gagal menyimpan')
+              }
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {toast && (
+        <div className="fixed left-1/2 top-4 z-[70] -translate-x-1/2 rounded-xl bg-red-700 px-4 py-2 font-bold text-white shadow-lg">{toast}</div>
+      )}
+    </div>
+  )
+}
+
+function LinkRow({ label, value }: { label: string; value: string }) {
+  const [ok, setOk] = useState(false)
+  if (!value) return null
+  return (
+    <div className="mb-3">
+      <p className="mb-1 text-sm font-bold">{label}</p>
+      <div className="flex gap-2">
+        <input readOnly className="field text-sm" value={value} onFocus={(e) => e.currentTarget.select()} />
+        <button
+          className="btn !text-sm"
+          onClick={() => navigator.clipboard.writeText(value).then(() => setOk(true), () => undefined)}
+        >
+          {ok ? 'Tersalin' : 'Salin'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function SettingsModal({
+  board,
+  onClose,
+  onSave,
+}: {
+  board: LoadedBoard['board']
+  onClose: () => void
+  onSave: (p: { title: string; cover_message: string; music_url: string }) => Promise<void>
+}) {
+  const [title, setTitle] = useState(board.title)
+  const [cover, setCover] = useState(board.cover_message)
+  const [music, setMusic] = useState(board.music_url)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  const pickSong = async (f: File | undefined) => {
+    if (!f) return
+    if (f.size > 10 * 1024 * 1024) return setErr('Lagu maksimal 10 MB')
+    setBusy(true)
+    setErr('')
+    try {
+      setMusic(await store.upload(f, f.name.split('.').pop()?.toLowerCase() || 'mp3'))
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Gagal mengunggah lagu')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title="Pengaturan" onClose={onClose}>
+      <div className="space-y-3">
+        <input className="field" maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Judul papan" />
+        <textarea className="field" rows={2} maxLength={500} value={cover} onChange={(e) => setCover(e.target.value)} placeholder="Pesan di sampul" />
+        <div>
+          <p className="mb-1 text-sm font-bold">Lagu latar</p>
+          <input className="field mb-2" value={music} onChange={(e) => setMusic(e.target.value)} placeholder="Tempel tautan mp3 langsung" />
+          {store.mode === 'cloud' ? (
+            <label className="btn inline-block !text-sm">
+              Unggah mp3 (maks 10 MB)
+              <input type="file" accept="audio/*" className="hidden" onChange={(e) => pickSong(e.target.files?.[0])} />
+            </label>
+          ) : (
+            <p className="text-xs text-stone-600">Unggah berkas lagu aktif setelah Supabase terhubung. Sekarang pakai tautan mp3.</p>
+          )}
+          {music && <audio controls src={music} className="mt-2 w-full" />}
+        </div>
+        {busy && <p className="text-sm font-bold">Mengunggah...</p>}
+        {err && <p className="text-sm font-bold text-red-700">{err}</p>}
+        <div className="flex justify-end gap-2">
+          <button className="btn" onClick={onClose}>Batal</button>
+          <button
+            className="btn !bg-amber-300"
+            disabled={busy}
+            onClick={() => onSave({ title: title.trim() || 'Papan Kita', cover_message: cover.trim(), music_url: music.trim() })}
+          >
+            Simpan
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
