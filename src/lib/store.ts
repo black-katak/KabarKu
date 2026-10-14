@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Board, Item, LoadedBoard } from '../types'
 import { blobToDataUrl } from './image'
+import { MIME_BY_EXT } from './catalog'
 
 export interface Tokens {
   viewToken: string
@@ -132,8 +133,12 @@ function makeCloudStore(supaUrl: string, supaKey: string): BoardStore {
     },
     async upload(file, ext) {
       const path = `${rand(16)}.${ext}`
-      const { error } = await sb.storage.from(BUCKET).upload(path, file, {
-        contentType: file.type || undefined,
+      // Untuk Blob/File, pustaka memakai jenis bawaan berkas dan mengabaikan opsi contentType.
+      // Bungkus ulang supaya jenis yang dikirim sesuai ekstensi, termasuk saat browser melaporkan jenis kosong.
+      const mime = MIME_BY_EXT[ext.toLowerCase()] || file.type
+      const body = mime && file.type !== mime ? new Blob([file], { type: mime }) : file
+      const { error } = await sb.storage.from(BUCKET).upload(path, body, {
+        contentType: mime || undefined,
         cacheControl: '31536000',
       })
       if (error) throw new Error(error.message)

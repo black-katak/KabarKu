@@ -7,7 +7,8 @@ import Composer from '../components/Composer'
 import Cover from '../components/Cover'
 import Modal from '../components/Modal'
 import MusicPlayer from '../components/MusicPlayer'
-import { uploadCover } from '../lib/cover'
+import CropModal from '../components/CropModal'
+import { MAX_SONG_MB, SONG_EXTS, friendlyUploadError } from '../lib/catalog'
 import { rememberBoard } from '../lib/myboards'
 import { store } from '../lib/store'
 import type { Item, ItemType, LoadedBoard } from '../types'
@@ -365,17 +366,20 @@ function SettingsModal({
   const [cover, setCover] = useState(board.cover_message)
   const [music, setMusic] = useState(board.music_url)
   const [coverImg, setCoverImg] = useState(board.cover_image ?? '')
+  const [coverFile, setCoverFile] = useState<File | null>(null) // foto yang sedang dipotong
+  const [coverSrc, setCoverSrc] = useState<File | null>(null) // foto asli untuk atur ulang
+  const [song, setSong] = useState<{ name: string; size: number } | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
-  const pickCover = async (f: File | undefined) => {
-    if (!f) return
+  const uploadCover = async (blob: Blob) => {
+    setCoverFile(null)
     setBusy(true)
     setErr('')
     try {
-      setCoverImg(await uploadCover(f))
+      setCoverImg(await store.upload(blob, 'jpg'))
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Gagal mengunggah foto sampul')
+      setErr(e instanceof Error ? friendlyUploadError(e.message) : 'Gagal mengunggah foto sampul')
     } finally {
       setBusy(false)
     }
@@ -383,19 +387,24 @@ function SettingsModal({
 
   const pickSong = async (f: File | undefined) => {
     if (!f) return
-    if (f.size > 10 * 1024 * 1024) return setErr('Lagu maksimal 10 MB')
+    const ext = f.name.split('.').pop()?.toLowerCase() ?? ''
+    if (!SONG_EXTS.includes(ext)) return setErr(`Jenis berkas .${ext || '?'} belum didukung. Pakai ${SONG_EXTS.join(', ')}.`)
+    if (f.size > MAX_SONG_MB * 1024 * 1024)
+      return setErr(`Lagu ${(f.size / 1048576).toFixed(1)} MB terlalu besar. Maksimal ${MAX_SONG_MB} MB.`)
     setBusy(true)
     setErr('')
     try {
-      setMusic(await store.upload(f, f.name.split('.').pop()?.toLowerCase() || 'mp3'))
+      setMusic(await store.upload(f, ext))
+      setSong({ name: f.name, size: f.size })
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Gagal mengunggah lagu')
+      setErr(e instanceof Error ? friendlyUploadError(e.message) : 'Gagal mengunggah lagu')
     } finally {
       setBusy(false)
     }
   }
 
   return (
+    <>
     <Modal title="Pengaturan" onClose={onClose}>
       <div className="space-y-3">
         <input className="field" maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Judul papan" />
@@ -410,8 +419,25 @@ function SettingsModal({
             )}
             <label className="btn inline-block !text-sm">
               {coverImg ? 'Ganti foto' : 'Pilih foto'}
-              <input type="file" accept="image/*" className="hidden" onChange={(e) => pickCover(e.target.files?.[0])} />
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) {
+                    setCoverSrc(f)
+                    setCoverFile(f)
+                  }
+                  e.target.value = ''
+                }}
+              />
             </label>
+            {coverSrc && coverImg && (
+              <button className="btn !text-sm" onClick={() => setCoverFile(coverSrc)}>
+                ✂ Atur potongan
+              </button>
+            )}
             {coverImg && (
               <button className="btn btn-danger !text-sm" onClick={() => setCoverImg('')}>
                 Hapus
@@ -421,16 +447,58 @@ function SettingsModal({
         </div>
         <div>
           <p className="mb-1 text-sm font-bold">Lagu latar</p>
-          <input className="field mb-2" value={music} onChange={(e) => setMusic(e.target.value)} placeholder="Tempel tautan mp3 langsung" />
           {store.mode === 'cloud' ? (
-            <label className="btn inline-block !text-sm">
-              Unggah mp3 (maks 10 MB)
-              <input type="file" accept="audio/*" className="hidden" onChange={(e) => pickSong(e.target.files?.[0])} />
+            <label className="block cursor-pointer rounded-xl border-2 border-dashed border-amber-700/50 bg-white/50 p-3 text-center font-bold">
+              🎵 {music ? 'Ganti lagu dari perangkat' : 'Pilih lagu dari perangkat'}
+              <span className="mt-1 block text-xs font-normal text-stone-600">
+                Format {SONG_EXTS.join(', ')}. Maksimal {MAX_SONG_MB} MB.
+              </span>
+              <input
+                type="file"
+                accept="audio/*,.mp3,.m4a,.aac,.ogg,.opus,.wav,.webm"
+                className="hidden"
+                onChange={(e) => {
+                  pickSong(e.target.files?.[0])
+                  e.target.value = ''
+                }}
+              />
             </label>
           ) : (
-            <p className="text-xs text-stone-600">Unggah berkas lagu aktif setelah Supabase terhubung. Sekarang pakai tautan mp3.</p>
+            <p className="rounded-lg bg-red-100 p-2 text-xs font-bold text-red-800">
+              Mode pratinjau: unggah lagu dari perangkat belum aktif karena Supabase belum tersambung. Pakai tautan mp3 di bawah.
+            </p>
           )}
-          {music && <audio controls src={music} className="mt-2 w-full" />}
+          {music && (
+            <div className="mt-2 rounded-lg bg-white/60 p-2 text-sm">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="truncate font-bold">
+                  {song ? `${song.name} (${(song.size / 1048576).toFixed(1)} MB)` : 'Lagu terpasang'}
+                </span>
+                <button
+                  className="btn btn-danger !px-3 !py-1 !text-xs"
+                  onClick={() => {
+                    setMusic('')
+                    setSong(null)
+                  }}
+                >
+                  Hapus lagu
+                </button>
+              </div>
+              <audio controls src={music} className="w-full" />
+            </div>
+          )}
+          <details className="mt-2">
+            <summary className="cursor-pointer text-sm font-bold">Atau pakai tautan mp3</summary>
+            <input
+              className="field mt-2"
+              value={music}
+              onChange={(e) => {
+                setMusic(e.target.value)
+                setSong(null)
+              }}
+              placeholder="https://.../lagu.mp3"
+            />
+          </details>
         </div>
         {busy && <p className="text-sm font-bold">Mengunggah...</p>}
         {err && <p className="text-sm font-bold text-red-700">{err}</p>}
@@ -446,6 +514,17 @@ function SettingsModal({
         </div>
       </div>
     </Modal>
+    {coverFile && (
+      <CropModal
+        file={coverFile}
+        title="Atur potongan foto sampul"
+        outSize={store.mode === 'local' ? 520 : 900}
+        quality={store.mode === 'local' ? 0.7 : 0.8}
+        onCancel={() => setCoverFile(null)}
+        onDone={uploadCover}
+      />
+    )}
+    </>
   )
 }
 

@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import type { Item, ItemType, PaperStyle } from '../types'
-import { COLORS, PAPERS, SIZES, STICKERS, randomRotation } from '../lib/catalog'
+import { COLORS, PAPERS, SIZES, STICKERS, friendlyUploadError, randomRotation } from '../lib/catalog'
 import { compressImage } from '../lib/image'
 import { newId, store } from '../lib/store'
 import { CANVAS_H, CANVAS_W } from '../types'
 import type { Viewport } from './Board'
+import CropModal from './CropModal'
 import Modal from './Modal'
 import Paper from './Paper'
 
@@ -48,23 +49,41 @@ export default function Composer({ type, item, topZ, area, onSave, onClose }: Pr
   const [it, setIt] = useState<Item>(() => item ?? blank(type, topZ + 1, area))
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const [cropFile, setCropFile] = useState<File | null>(null) // foto yang sedang dipotong
+  const [srcFile, setSrcFile] = useState<File | null>(null) // foto asli, untuk atur ulang potongan
   const set = (p: Partial<Item>) => setIt((o) => ({ ...o, ...p }))
   const isNew = !item
 
+  // Foto polaroid: dipotong dulu lewat CropModal, baru diunggah.
+  const uploadCropped = async (blob: Blob) => {
+    setCropFile(null)
+    setBusy(true)
+    setErr('')
+    try {
+      set({ image_url: await store.upload(blob, 'jpg'), sticker: '' })
+    } catch (e) {
+      setErr(e instanceof Error ? friendlyUploadError(e.message) : 'Gagal mengunggah foto')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const pickFile = async (file: File | undefined, mode: 'photo' | 'sticker') => {
     if (!file) return
+    if (mode === 'photo') {
+      setSrcFile(file)
+      setCropFile(file)
+      return
+    }
     setBusy(true)
     setErr('')
     try {
       const local = store.mode === 'local'
-      const blob =
-        mode === 'photo'
-          ? await compressImage(file, { square: true, max: local ? 520 : 900, quality: local ? 0.7 : 0.8 })
-          : await compressImage(file, { max: local ? 220 : 400, type: 'image/png' })
-      const url = await store.upload(blob, mode === 'photo' ? 'jpg' : 'png')
+      const blob = await compressImage(file, { max: local ? 220 : 400, type: 'image/png' })
+      const url = await store.upload(blob, 'png')
       set({ image_url: url, sticker: '' })
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Gagal mengunggah gambar')
+      setErr(e instanceof Error ? friendlyUploadError(e.message) : 'Gagal mengunggah gambar')
     } finally {
       setBusy(false)
     }
@@ -79,6 +98,7 @@ export default function Composer({ type, item, topZ, area, onSave, onClose }: Pr
   const title = { note: 'Tulis catatan', photo: 'Tempel foto', sticker: 'Pilih stiker' }[it.type]
 
   return (
+    <>
     <Modal title={isNew ? title : 'Ubah'} onClose={onClose}>
       {it.type === 'note' && (
         <div className="space-y-3">
@@ -147,8 +167,21 @@ export default function Composer({ type, item, topZ, area, onSave, onClose }: Pr
             ) : (
               'Pilih foto dari galeri atau kamera'
             )}
-            <input type="file" accept="image/*" className="hidden" onChange={(e) => pickFile(e.target.files?.[0], 'photo')} />
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                pickFile(e.target.files?.[0], 'photo')
+                e.target.value = ''
+              }}
+            />
           </label>
+          {srcFile && it.image_url && (
+            <button className="btn !text-sm" onClick={() => setCropFile(srcFile)}>
+              ✂ Atur potongan lagi
+            </button>
+          )}
           <input
             className="field font-hand text-xl"
             maxLength={40}
@@ -205,5 +238,16 @@ export default function Composer({ type, item, topZ, area, onSave, onClose }: Pr
         </button>
       </div>
     </Modal>
+    {cropFile && (
+      <CropModal
+        file={cropFile}
+        title="Atur potongan foto polaroid"
+        outSize={store.mode === 'local' ? 520 : 900}
+        quality={store.mode === 'local' ? 0.7 : 0.8}
+        onCancel={() => setCropFile(null)}
+        onDone={uploadCropped}
+      />
+    )}
+    </>
   )
 }

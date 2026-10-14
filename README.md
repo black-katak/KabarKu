@@ -15,7 +15,9 @@ Tanpa pengaturan tambahan, aplikasi berjalan di mode pratinjau. Data tersimpan d
 3. Salin `.env.example` menjadi `.env`, isi `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY` (Project Settings, API).
 4. Jalankan ulang `npm run dev`.
 
-Batas paket gratis Supabase: 500 MB database, 1 GB penyimpanan. Proyek dijeda setelah 7 hari tanpa aktivitas. Buka papan sebelum hari kejutan. Foto dikompres otomatis. Lagu maksimal 10 MB.
+Jalankan juga `003_cover_image.sql`, `004_rate_limit.sql`, dan `005_audio_limits.sql` (batas lagu 20 MB) di SQL Editor.
+
+Batas paket gratis Supabase: 500 MB database, 1 GB penyimpanan. Proyek dijeda setelah 7 hari tanpa aktivitas. Buka papan sebelum hari kejutan. Foto dikompres otomatis. Lagu maksimal 20 MB (mp3, m4a, aac, ogg, wav, webm).
 
 ## Deploy gratis
 Cloudflare Pages, Netlify, atau Vercel. Perintah build: `npm run build`. Folder: `dist`. Isi dua variabel `VITE_` di pengaturan hosting. Tambahkan aturan SPA agar `/b/*` dan `/e/*` membuka `index.html` (Netlify: berkas `_redirects` berisi `/* /index.html 200`, sudah ada di `public/`).
