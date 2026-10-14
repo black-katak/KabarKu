@@ -131,7 +131,7 @@ export default function BoardPage() {
   const editLink = editToken ? `${origin}/e/${editToken}` : ''
 
   return (
-    <div className="min-h-screen bg-[#3b2a1e] px-3 pb-28 pt-4">
+    <div className="min-h-screen bg-[#3b2a1e] px-3 pb-32 pt-4">
       <AnimatePresence>
         {covered && (
           <Cover
