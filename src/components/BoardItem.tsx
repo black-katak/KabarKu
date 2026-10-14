@@ -16,9 +16,11 @@ interface Props {
   onSelect: (id: string) => void
   onMove: (id: string, x: number, y: number) => void
   onCommit: (id: string) => void
+  onRemove: (id: string) => void
 }
 
-export default function BoardItem({ item, index, scale, editable, selected, fresh, onSelect, onMove, onCommit }: Props) {
+export default function BoardItem({ item, index, scale, editable, selected, fresh, onSelect, onMove, onCommit, onRemove }: Props) {
+  const keyTimer = useRef<number | undefined>(undefined)
   const drag = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(null)
 
   const down = (e: React.PointerEvent) => {
@@ -44,10 +46,44 @@ export default function BoardItem({ item, index, scale, editable, selected, fres
     if (d?.moved) onCommit(item.id)
   }
 
+  const label = {
+    note: `Catatan: ${item.content}`,
+    photo: `Foto: ${item.caption || 'tanpa keterangan'}`,
+    sticker: 'Stiker',
+  }[item.type]
+
+  // Panah memindahkan 10px (Shift 40px). Delete menghapus. Perubahan disimpan sesaat setelah berhenti menekan.
+  const key = (e: React.KeyboardEvent) => {
+    if (!editable || e.target !== e.currentTarget) return
+    const step = e.shiftKey ? 40 : 10
+    const d: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }
+    if (d[e.key]) {
+      e.preventDefault()
+      const [dx, dy] = d[e.key]
+      onMove(item.id, Math.max(-item.width / 2, Math.min(CANVAS_W - item.width / 2, item.x + dx)), Math.max(-item.height / 2, Math.min(CANVAS_H - item.height / 2, item.y + dy)))
+      window.clearTimeout(keyTimer.current)
+      keyTimer.current = window.setTimeout(() => onCommit(item.id), 400)
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault()
+      onRemove(item.id)
+    }
+  }
+
   const height = item.type === 'photo' ? item.width * 1.2 : item.height
 
   return (
     <div
+      {...(editable
+        ? {
+            tabIndex: 0,
+            role: 'button',
+            'aria-label': `${label}. Panah untuk memindah, Delete untuk menghapus.`,
+            'aria-pressed': selected,
+            onFocus: () => onSelect(item.id),
+            onKeyDown: key,
+          }
+        : {})}
+      className="item-wrap"
       onPointerDown={down}
       onPointerMove={move}
       onPointerUp={up}

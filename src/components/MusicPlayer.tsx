@@ -9,6 +9,7 @@ const FADE_MS = 3000 // lama volume naik dari senyap ke penuh
 export default function MusicPlayer({ url, playSignal }: { url: string; playSignal: number }) {
   const ref = useRef<HTMLAudioElement>(null)
   const [playing, setPlaying] = useState(false)
+  const [failed, setFailed] = useState(false)
   const timers = useRef<{ delay?: number; fade?: number }>({})
 
   const stopTimers = () => {
@@ -37,6 +38,7 @@ export default function MusicPlayer({ url, playSignal }: { url: string; playSign
   }, [playSignal])
 
   useEffect(() => stopTimers, [])
+  useEffect(() => setFailed(false), [url])
 
   if (!url) return null
   const toggle = () => {
@@ -57,6 +59,11 @@ export default function MusicPlayer({ url, playSignal }: { url: string; playSign
         preload="auto"
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
+        onError={() => {
+          setFailed(true)
+          setPlaying(false)
+        }}
+        onCanPlay={() => setFailed(false)}
       />
       <button className="btn flex items-center gap-2 !text-sm" onClick={toggle} aria-label={playing ? 'Jeda lagu' : 'Putar lagu'}>
         <span className={playing ? 'inline-block animate-spin' : ''} style={{ animationDuration: '3s' }}>
@@ -64,6 +71,11 @@ export default function MusicPlayer({ url, playSignal }: { url: string; playSign
         </span>
         {playing ? 'Jeda' : 'Putar lagu'}
       </button>
+      {failed && (
+        <span role="alert" className="rounded-lg bg-red-100 px-2 py-1 text-xs font-bold text-red-800">
+          Lagu tidak bisa dimuat. Pemilik papan perlu mengganti tautannya.
+        </span>
+      )}
     </>
   )
 }

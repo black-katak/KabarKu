@@ -216,6 +216,7 @@ export default function BoardPage() {
               if (it && it.z < top) patch(id, { z: top + 1 }, true)
             }
           }}
+          onRemove={remove}
           onMove={(id, x, y) => {
             busy.current = true
             patch(id, { x, y }, false)
@@ -472,7 +473,7 @@ function TitleEditor({ title, onSave }: { title: string; onSave: (t: string) => 
     )
   return (
     <button
-      className="group flex items-center gap-2 text-left"
+      className="group flex min-h-[44px] items-center gap-2 text-left"
       onClick={() => {
         setVal(title)
         setEditing(true)

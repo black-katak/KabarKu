@@ -11,6 +11,7 @@ interface Props {
   onSelect: (id: string | null) => void
   onMove: (id: string, x: number, y: number) => void
   onCommit: (id: string) => void
+  onRemove: (id: string) => void
   // Mendaftarkan fungsi yang mengembalikan area papan yang sedang terlihat (koordinat kanvas).
   registerViewport?: (fn: () => Viewport) => void
 }
@@ -27,7 +28,7 @@ const READ_SCALE = 0.6 // skala baca di ponsel (papan digeser dengan jari)
 const CHROME = 28 // bingkai kayu kiri+kanan / atas+bawah
 const RESERVED_H = 220 // tinggi judul + toolbar bawah di layar lebar
 
-export default function Board({ items, editable, selectedId, freshIds, onSelect, onMove, onCommit, registerViewport }: Props) {
+export default function Board({ items, editable, selectedId, freshIds, onSelect, onMove, onCommit, onRemove, registerViewport }: Props) {
   const wrap = useRef<HTMLDivElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 1250, vh: 800 })
@@ -110,6 +111,7 @@ export default function Board({ items, editable, selectedId, freshIds, onSelect,
                   onSelect={onSelect}
                   onMove={onMove}
                   onCommit={onCommit}
+                  onRemove={onRemove}
                 />
               ))}
             </div>

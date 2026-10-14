@@ -313,3 +313,20 @@ body {
     transition: none;
   }
 }
+
+/* Target sentuh minimal 44px di layar sentuh */
+@media (pointer: coarse) {
+  .btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .field {
+    min-height: 44px;
+  }
+}
+
+.item-wrap:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 8px;
+  border-radius: 4px;
+}
