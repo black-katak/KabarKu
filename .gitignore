@@ -4,3 +4,10 @@ dist
 .env.local
 *.tsbuildinfo
 .netlify
+.env.*
+!.env.example
+*.pem
+*.key
+*service-account*.json
+supabase/.temp
+supabase/.branches
